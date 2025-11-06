@@ -1,0 +1,78 @@
+<!-- ✅ NovaAI v26 (restored style) + FLUX 1.1 Pro debug wired
+NOTE: This version only updates backend proxy + debug send. 
+Do NOT use in production yet without switching PROXY back to proxy.php.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NovaAI 26 Debug</title>
+<style>
+/* (Tu CSS original aquí – no modificado) */
+</style>
+</head>
+<body>
+<!-- (Tu estructura original aquí: chips A/B, Upload, Buttons, Result panel, history, etc.) -->
+
+<script>
+// ✅ TEMP backend debug server
+// const PROXY = "/proxy.php"; // 👉 Lo volvemos luego
+const PROXY = "https://novaai-flux-debug.onrender.com"; // ✅ tu Render debug
+
+// 👉 Global vars
+let selectedA = null;
+let selectedB = null;
+let lastOp = null;
+
+// ✅ Capturar selección de chip A
+function selectA(base64) {
+  selectedA = base64;
+  lastOp = "useA";
+}
+
+// ✅ Capturar subida B
+const fileInput = document.getElementById("fileInput");
+fileInput.onchange = function(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){ selectedB = ev.target.result; lastOp = "useB"; };
+  reader.readAsDataURL(file);
+}
+
+// ✅ Quick actions (igual que v26 original)
+function qaReplace(){ lastOp = "qa-replace"; generate(); }
+function qaOverlay(){ lastOp = "qa-overlay"; generate(); }
+function qaUseA(){ lastOp = "qa-useA"; selectedB=null; generate(); }
+function qaUseB(){ lastOp = "qa-useB"; selectedA=null; generate(); }
+
+// ✅ GENERAR
+async function generate(){
+  const prompt = document.getElementById("promptField").value || "";
+  const negative = "";
+
+  const body = {
+    ref: selectedA,
+    image_base64: selectedB,
+    prompt,
+    negative,
+    op: lastOp,
+    params: { strength: 0.38 },
+    debug: true // 🔥 modo diagnóstico
+  };
+
+  const res = await fetch(`${PROXY}/api/generate`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  console.log("DEBUG RESPONSE",data);
+  document.getElementById("result").textContent = JSON.stringify(data,null,2);
+}
+</script>
+
+<pre id="result" style="color:#0f0;background:#111;padding:10px">Debug response...</pre>
+
+</body>
+</html>
