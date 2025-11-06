@@ -1,121 +1,248 @@
-import express from "express";
-import cors from "cors";
-import multer from "multer";
-import Replicate from "replicate";
+// server.js — NovaAI (único motor: Flux 1.1 Pro en Replicate)
+// ----------------------------------------------------------
+// Endpoints:
+//   GET  /api/health
+//   POST /api/generate
+//
+// Body esperado (JSON):
+// {
+//   "op": "qa-useb" | "qa-replace" | "qa-overlay" | "qa-insert" | "" ,
+//   "prompt": "texto",
+//   "negative": "texto negativo opcional",
+//   "ref": "data:image/png;base64,...",         // A (opcional)
+//   "image_base64": "data:image/... || base64", // B (opcional)
+//   "image": "...", "image_b64": "...", "b64": "...",  // aliases de B
+//   "params": { "strength": 0.35, "guidance_scale": 4.5, "seed": 0, "width": 1024, "height": 1024 }
+// }
+//
+// Respuesta:
+// { ok: true, engine: "black-forest-labs/flux-1.1-pro", image_url: "...", inputEcho: {...}, ... }
 
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+
+// Node 18+ ya trae fetch nativo
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(cors());
+app.use(express.json({ limit: '18mb' })); // permite dataURL grandes
 
-app.use(cors({ origin: (o, cb) => cb(null, true), credentials: true }));
-app.use(express.json({ limit: "50mb" }));
+// --------- Config ----------
+const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN || '';
+const MODEL = 'black-forest-labs/flux-1.1-pro';
+const REPLICATE_BASE = 'https://api.replicate.com/v1';
 
-// Para soportar multipart si algún día envías archivos directos
-const upload = multer({ storage: multer.memoryStorage() });
-
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || "";
-const IMAGE_ENGINE = process.env.IMAGE_ENGINE || "black-forest-labs/flux-1.1-pro";
-const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
-
-// -------- utilidades --------
-function guidanceFromStrength(s) {
-  s = Math.max(0, Math.min(1, Number(s)));
-  return 3 + (8 - 3) * s; // 3..8
-}
-function guidanceText({ keep_background = true, preserve_subject = true, preserve_layout = true, op = "" }) {
-  const g = [];
-  if (keep_background) g.push("Keep SAME background.");
-  if (preserve_subject) g.push("Preserve subject identity, silhouette, materials and colors.");
-  if (preserve_layout)  g.push("Preserve layout, composition, camera and framing.");
-  if (op === "qa-replace") g.push("Replace A's main figure with B while keeping A's background and camera.");
-  if (op === "qa-overlay") g.push("Overlay B on A without changing A's background or camera.");
-  if (op === "qa-insert")  g.push("Insert B into A respecting perspective and lighting; do not change background.");
-  if (op === "qa-remove")  g.push("Remove figure B; keep background and layout of A.");
-  g.push("Apply ONLY the requested change. Avoid style drift.");
-  return g.join(" ");
-}
-async function run(engine, input) {
-  const out = await replicate.run(engine, { input });
-  return Array.isArray(out) ? out[0] : out;
+// --------- Helpers ----------
+function stripDataHeader(s = '') {
+  if (!s) return '';
+  if (s.startsWith('data:image/')) {
+    const idx = s.indexOf('base64,');
+    return idx > -1 ? s.slice(idx + 'base64,'.length) : s;
+  }
+  return s; // puede venir ya en base64 “limpio”
 }
 
-// -------- endpoints --------
-app.get("/api/health", (_, res) => {
-  res.json({ ok: true, engine: IMAGE_ENGINE, time: new Date().toISOString() });
+function pickB(body = {}) {
+  const raw =
+    body.image_base64 ||
+    body.image ||
+    body.image_b64 ||
+    body.b64 ||
+    '';
+  return stripDataHeader(raw);
+}
+
+function hasSomething(v) {
+  return !!(v && String(v).length > 0);
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Construye los inputs para Flux 1.1 Pro.
+// Nota: distintos proveedores usan claves ligeramente diferentes;
+// aquí usamos nombres “seguros”: prompt, image, strength, guidance, seed, width, height.
+// Si el backend de Replicate ignora alguna, no rompe.
+function buildFluxInputs(body) {
+  const op = String(body.op || '').toLowerCase();
+  const prompt = body.prompt || '';
+  const negative = body.negative || '';
+
+  // B (img2img)
+  const b64 = pickB(body);
+  const imageDataUrl = hasSomething(b64) ? `data:image/png;base64,${b64}` : undefined;
+
+  // A (referencia / ip-adapter). No todos los runners lo exponen como input estándar,
+  // pero se incluye cuando esté soportado.
+  const ref = hasSomething(body.ref) ? body.ref : undefined;
+
+  // params
+  const p = body.params || {};
+  let strength =
+    typeof p.strength === 'number'
+      ? p.strength
+      : typeof p.param_strength === 'number'
+      ? p.param_strength
+      : 0.35;
+
+  let guidance =
+    typeof p.guidance_scale === 'number'
+      ? p.guidance_scale
+      : typeof p.guidance === 'number'
+      ? p.guidance
+      : 4.5;
+
+  const seed = typeof p.seed === 'number' ? p.seed : undefined;
+  const width = typeof p.width === 'number' ? p.width : undefined;
+  const height = typeof p.height === 'number' ? p.height : undefined;
+
+  // Caso especial: Use only B ⇒ fidelidad máxima (no añadir ruido a B).
+  if (op === 'qa-useb') {
+    strength = 0.0;
+    // guidance moderado para no “alucinar” detalles fuera de B
+    if (typeof p.guidance_scale !== 'number' && typeof p.guidance !== 'number') {
+      guidance = 5.0;
+    }
+  }
+
+  // Construimos inputs “conservadores”
+  const inputs = {
+    prompt,
+    negative_prompt: negative || undefined,
+    image: imageDataUrl,            // B (img2img). Si no hay, Flux hará txt2img
+    strength,                       // 0.0..1.0
+    guidance,                       // 0..~8 aprox
+    seed,
+    width,
+    height,
+    // Campos opcionales si el runner los soporta:
+    // ip_adapter_image / reference_image / conditioning_image…
+    ip_adapter_image: ref,          // A (si el modelo lo ignora, no pasa nada)
+    reference_image: ref
+  };
+
+  // Limpia undefined
+  Object.keys(inputs).forEach((k) => inputs[k] === undefined && delete inputs[k]);
+  return { inputs, op, b64len: b64.length, hasRef: !!ref };
+}
+
+async function createPrediction(inputs) {
+  if (!REPLICATE_TOKEN) {
+    const err = new Error('REPLICATE_API_TOKEN missing');
+    err.code = 401;
+    throw err;
+  }
+
+  const res = await fetch(`${REPLICATE_BASE}/models/${MODEL}/predictions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${REPLICATE_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ input: inputs })
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    const err = new Error(`Replicate create error: ${res.status} ${t}`);
+    err.code = res.status;
+    throw err;
+  }
+
+  return res.json();
+}
+
+async function waitPrediction(getUrl) {
+  // Sondear hasta "succeeded" | "failed" | "canceled"
+  for (let i = 0; i < 80; i++) { // ~2 min a 1.5s
+    await sleep(1500);
+    const r = await fetch(getUrl, {
+      headers: { Authorization: `Token ${REPLICATE_TOKEN}` }
+    });
+    const j = await r.json();
+    if (j.status === 'succeeded' || j.status === 'failed' || j.status === 'canceled') {
+      return j;
+    }
+  }
+  const err = new Error('Timeout waiting prediction');
+  err.code = 504;
+  throw err;
+}
+
+// --------- Routes ----------
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    engine: MODEL,
+    time: new Date().toISOString()
+  });
 });
 
-// Este endpoint acepta:
-// { ref (A base64), image_base64 (B base64), prompt, negative, op, params, debug }
-app.post("/api/generate", upload.single("file"), async (req, res) => {
+app.post('/api/generate', async (req, res) => {
   try {
-    const body = req.body || {};
-    const raw = typeof body.params === "string" ? (() => { try { return JSON.parse(body.params); } catch { return {}; } })() : (body.params || {});
-    const keep_background = !!(raw.keep_background ?? true);
-    const preserve_subject = !!(raw.preserve_subject ?? true);
-    const preserve_layout  = !!(raw.preserve_layout  ?? true);
-    const strength         = Number(raw.strength ?? 0.35);
-    const op               = (body.op || "").trim();
-    const guidance_scale   = guidanceFromStrength(strength);
+    const { inputs, op, b64len, hasRef } = buildFluxInputs(req.body || {});
+    const inputEcho = { op, hasA: hasRef, hasB: b64len > 0, lenA: hasRef ? (req.body.ref?.length || 0) : 0, lenB: b64len, params: { strength: inputs.strength, guidance: inputs.guidance, seed: inputs.seed, width: inputs.width, height: inputs.height } };
 
-    // A (catálogo) y B (upload/reference)
-    let A = body.ref || null;
-    let B = body.image_base64 || body.imageB || null;
-
-    // Si viene archivo multipart, lo convertimos a dataURL base64
-    if (req.file?.buffer && req.file?.mimetype) {
-      const b64 = req.file.buffer.toString("base64");
-      B = `data:${req.file.mimetype};base64,${b64}`;
-    }
-
-    const received = {
-      hasA: !!A, hasB: !!B, lenA: A?.length || 0, lenB: B?.length || 0, op,
-      keep_background, preserve_subject, preserve_layout, guidance_scale
-    };
-
-    if (!REPLICATE_API_TOKEN) return res.status(401).json({ ok: false, msg: "Missing REPLICATE_API_TOKEN", received });
-    if (!A && !B)           return res.status(400).json({ ok: false, msg: "Missing input image (ref or file)", received });
-
-    const prompt = [
-      guidanceText({ keep_background, preserve_subject, preserve_layout, op }),
-      (body.prompt?.trim() ? `User: ${body.prompt.trim()}` : "")
-    ].filter(Boolean).join(" ");
-    const negative = (body.negative || "").trim();
-
-    // Modo diagnóstico: no llama al modelo, solo eco
-    if (String(body.debug || "").toLowerCase() === "true") {
-      return res.json({ ok: true, engine: IMAGE_ENGINE, received, prompt, negative });
-    }
-
-    // Solo A o solo B → img2img simple
-    if (!!A ^ !!B) {
-      const img = A || B;
-      const out = await run(IMAGE_ENGINE, {
-        image: img,
-        prompt,
-        negative_prompt: negative,
-        guidance_scale
+    // Pequeñas guardas para evitar “genéricas” por configuración imposible
+    if (['qa-replace', 'qa-overlay', 'qa-insert'].includes(op) && !hasRef) {
+      return res.status(400).json({
+        ok: false,
+        warning: 'Missing A for AB operation; would fall back to txt2img.',
+        inputEcho
       });
-      return res.json({ ok: true, engine: IMAGE_ENGINE, image: out, customer: out, received });
+    }
+    if (op === 'qa-useb' && !inputEcho.hasB) {
+      return res.status(400).json({
+        ok: false,
+        warning: 'Missing B for "use only B".',
+        inputEcho
+      });
     }
 
-    // A + B → intentos con parámetros de referencia comunes (IP-Adapter/conditioning)
-    const shared = { prompt, negative_prompt: negative, guidance_scale };
-    const tries = [
-      async () => run(IMAGE_ENGINE, { image: A, reference_image: B,   ...shared }),
-      async () => run(IMAGE_ENGINE, { image: A, adapter_image: B,     ...shared }),
-      async () => run(IMAGE_ENGINE, { image: A, conditioning_image: B,...shared }),
-      async () => run(IMAGE_ENGINE, { image: A, image_b: B,           ...shared }),
-    ];
-    let final = null, lastErr = null, attempt = -1;
-    for (let i = 0; i < tries.length; i++) {
-      try { final = await tries[i](); attempt = i; if (final) break; } catch (e) { lastErr = e; }
+    // Crear predicción
+    const created = await createPrediction(inputs);
+    const getUrl = created?.urls?.get;
+    if (!getUrl) {
+      return res.status(502).json({ ok: false, warning: 'No polling URL from Replicate', engine: MODEL, inputEcho, raw: created });
     }
-    if (!final) return res.status(422).json({ ok: false, msg: "Engine does not support A+B with current params", received, attempt, detail: String(lastErr || "") });
 
-    return res.json({ ok: true, engine: IMAGE_ENGINE, image: final, customer: final, received, attempt });
-  } catch (e) {
-    console.error("Fatal:", e);
-    res.status(500).json({ ok: false, msg: e?.message || "Unknown error" });
+    const done = await waitPrediction(getUrl);
+    if (done.status !== 'succeeded') {
+      return res.status(502).json({
+        ok: false,
+        engine: MODEL,
+        status: done.status,
+        error: done.error || null,
+        inputEcho,
+        raw: done
+      });
+    }
+
+    // Replicate suele devolver `output` como URL o array de URLs
+    let image_url = null;
+    if (Array.isArray(done.output) && done.output.length) image_url = done.output[0];
+    else if (typeof done.output === 'string') image_url = done.output;
+
+    return res.json({
+      ok: true,
+      engine: MODEL,
+      image_url,
+      inputEcho,
+      replicate_id: done.id
+    });
+  } catch (err) {
+    const code = err.code || 500;
+    return res.status(code).json({
+      ok: false,
+      engine: MODEL,
+      error: String(err && err.message ? err.message : err),
+    });
   }
 });
 
-app.listen(PORT, () => console.log(`✅ Debug Flux 1.1 Pro listening on :${PORT}`));
+// --------- Listen ----------
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`[NovaAI] Server up on ${PORT} · Engine: ${MODEL}`);
+});
