@@ -65,4 +65,5 @@ app.post("/api/generate",async(req,res)=>{
  }
 });
 
-app.listen(3000,()=>console.log("Flux server READY"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Flux server READY on", PORT));
