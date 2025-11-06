@@ -1,78 +1,673 @@
-<!-- ✅ NovaAI v26 (restored style) + FLUX 1.1 Pro debug wired
-NOTE: This version only updates backend proxy + debug send. 
-Do NOT use in production yet without switching PROXY back to proxy.php.
--->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>NovaAI 26 Debug</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NeguNova · NovaAI Customizer</title>
 <style>
-/* (Tu CSS original aquí – no modificado) */
+:root{
+  --bg:#0f172a; --panel:#111827; --panel2:#0b1020; --text:#e5e7eb;
+  --muted:#94a3b8; --border:#1f2937; --ring:#203154;
+  --brand:#f59e0b; --ok:#22c55e; --ink:#111; --chip:#1f2937;
+  --shadow:0 10px 30px rgba(0,0,0,.35); --badge:#2b3957;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+
+/* Header */
+header{background:linear-gradient(90deg,#ff7a18,#ffb347);color:var(--ink);padding:8px 12px;position:sticky;top:0;z-index:10}
+nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+nav a{color:var(--ink);text-decoration:none;background:#fff2;padding:6px 10px;border-radius:10px;font-weight:700}
+nav a[aria-current="page"]{background:#fff}
+
+/* Layout */
+.wrap{display:grid;grid-template-columns:320px 1fr;gap:10px;max-width:1200px;margin:0 auto;padding:10px;height:calc(100vh - 56px)}
+@media (max-width:980px){.wrap{grid-template-columns:1fr;height:auto}}
+.panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:14px;padding:12px;display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+h2{margin:0 0 6px}
+.sub{color:var(--muted);font-size:.85rem;margin:6px 0}
+.stack{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+label{color:var(--muted);font-size:.82rem}
+input[type="file"],select,textarea{width:100%;background:#0b1226;color:#e5e7eb;border:1px solid var(--ring);border-radius:.6rem;padding:.6rem .7rem}
+textarea{min-height:88px;resize:both}
+#prompt{border:1px solid #ff9f1c; box-shadow:inset 0 0 0 1px #ff9f1c22}
+
+/* Catálogos botón elíptico */
+.seg3{display:flex;gap:0;border-radius:9999px;overflow:hidden;border:2px solid #ffffff18;box-shadow:0 10px 25px rgba(0,0,0,.4);width:100%;max-width:300px;margin:4px 0 6px 0}
+.seg3 a{flex:1 1 0;display:inline-block;text-align:center;text-decoration:none;color:#fff;font-weight:900;padding:8px 10px;letter-spacing:.2px;user-select:none;font-size:12px;min-width:0;white-space:nowrap;cursor:pointer}
+.seg3 .left{background:linear-gradient(90deg,#f43f5e,#a21caf)}
+.seg3 .center{background:linear-gradient(90deg,#ff7a00,#ff3a2f);border-left:1px solid rgba(255,255,255,.18);border-right:1px solid rgba(255,255,255,.18)}
+.seg3 .right{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+
+/* Chips fila compacta */
+.chipsRow{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+.chipBox{min-height:44px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:4px 6px;max-width:100%;overflow:hidden}
+.thumb{width:28px;height:28px;border-radius:6px;object-fit:cover;border:1px solid #111;background:#000;flex:0 0 28px}
+.xbtn{border:0;background:#374151;color:#e5e7eb;border-radius:999px;padding:2px 7px;cursor:pointer;font-weight:900}
+.badgeAB{display:none} /* ocultamos letras; solo mini imagen + X */
+.chip-empty{color:#94a3b8;font-size:.82rem;display:flex;align-items:center;gap:6px}
+.emptyTitle{font-weight:700;color:#cbd5e1}
+.emptyHint{font-size:.75rem;color:#94a3b8;border:1px dashed #2a3a63;padding:2px 6px;border-radius:999px}
+
+/* Flecha B→A */
+.arrowBA{display:grid;place-items:center}
+.arrowBA .led{width:14px;height:14px;border-radius:999px;border:1px solid #24314c;background:#2a344d;box-shadow:inset 0 0 4px rgba(0,0,0,.8);margin-bottom:3px}
+.arrowBA .led.on{background:#1aff7a;border-color:#0c7c40;box-shadow:0 0 8px rgba(26,255,122,.6), inset 0 0 4px rgba(0,0,0,.5)}
+.arrowBA .arrow{font-size:16px;color:#9fb;user-select:none}
+
+/* Result */
+.result{height:min(56vh,620px);background:#0b0f1d;border:1px dashed #253055;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.result img{width:100%;height:100%;object-fit:contain;display:block}
+.helper{color:#94a3b8;font-size:.9rem}
+.msg{margin-top:8px;font-size:.86rem;color:#e5e7eb;white-space:pre-wrap;opacity:.9}
+.alert{background:#1f2937;border:1px solid #f43f5e;color:#fecaca;padding:8px 10px;border-radius:10px;margin-top:8px;white-space:pre-wrap}
+
+/* Toolbar centrada */
+.toolbar-wrap{display:grid;place-items:center;margin-top:12px}
+.toolbar{display:grid;grid-template-columns:auto 104px auto;gap:14px;align-items:center}
+
+/* Clear | History (mitades) */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:0;height:52px;width:280px}
+.split button{border:1px solid #2d3b55;background:linear-gradient(180deg,#1b2435,#141b2b);color:#e7f0ff;font-weight:900;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);height:100%}
+.split .left{border-radius:999px 0 0 999px}
+.split .right{border-radius:0 999px 999px 0;border-left:none}
+
+/* NovaAI FAB */
+.fab{width:104px;height:104px;border-radius:999px;cursor:pointer;border:0;position:relative;box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.2);background:radial-gradient(140px 140px at 30% 30%,#fff 0%,#e9eef7 30%,#c7d0de 55%,#9ea7b6 70%,#7a8391 85%,#5b6473 100%)}
+.fab::before{content:"";position:absolute;inset:-6px;border-radius:inherit;box-shadow:0 0 0 4px rgba(255,0,0,0),0 0 40px rgba(255,0,0,0);transition:box-shadow .18s}
+.fab .inner{position:absolute;inset:12px;border-radius:inherit;background:radial-gradient(90px 90px at 50% 50%,#fff 0%,#f6f7fb 45%,#e9edf6 70%,#d2d8e4 100%);display:grid;place-items:center;font-weight:900;letter-spacing:.3px;color:#20242c;border:1px solid #c9d2e0;text-transform:uppercase;font-size:12px}
+.fab.busy::before{box-shadow:0 0 0 4px rgba(255,40,40,.9),0 0 40px rgba(255,30,30,.55)}
+.fab.busy .inner{animation:pulse-red 1.1s ease-in-out infinite}
+@keyframes pulse-red{0%{box-shadow:0 0 0 0 rgba(255,60,60,.55)}70%{box-shadow:0 0 0 14px rgba(255,60,60,0)}100%{box-shadow:0 0 0 0 rgba(255,60,60,0)}}
+.fab.ok::before{box-shadow:0 0 0 4px rgba(46,204,113,.9),0 0 40px rgba(46,204,113,.55)}
+.fab.ok .inner{box-shadow:inset 0 0 0 2px rgba(46,204,113,.35)}
+
+/* ORDER NOW */
+.cta-order{height:52px;padding:0 20px;border-radius:999px;border:1px solid #b45b00;background:linear-gradient(180deg,#ffd54d,#ff9f1c);color:#2b1900;font-weight:900;letter-spacing:.2px;cursor:pointer;box-shadow:0 10px 26px rgba(255,159,28,.35), inset 0 1px 0 rgba(255,255,255,.45);display:inline-flex;align-items:center;gap:10px;width:280px;justify-content:center}
+.cta-order .ic{width:18px;height:18px;display:inline-block}
+.cta-order:hover{filter:brightness(1.06)}
+.cta-order:active{transform:translateY(1px)}
+.cta-order.pulse{animation:order-pulse 1.2s ease-out 1}
+@keyframes order-pulse{0%{box-shadow:0 0 0 0 rgba(255,159,28,.65),inset 0 1px 0 rgba(255,255,255,.45)}70%{box-shadow:0 0 0 14px rgba(255,159,28,0),inset 0 1px 0 rgba(255,255,255,.45)}100%{box-shadow:0 0 0 0 rgba(255,159,28,0),inset 0 1px 0 rgba(255,255,255,.45)}}
+
+/* Side history */
+.slide{position:fixed;top:0;right:0;height:100vh;width:min(430px,92vw);background:#0b1220;border-left:1px solid var(--ring);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .25s;z-index:70;display:grid;grid-template-rows:auto 1fr; pointer-events:none;}
+.slide.open{transform:translateX(0); pointer-events:auto;}
+.slide header{padding:10px 12px;border-bottom:1px solid var(--ring);display:flex;justify-content:space-between;align-items:center}
+.slide .body{padding:10px 12px;overflow:auto}
+.hist{display:grid;gap:10px}
+.card{background:#0f1426;border:1px solid var(--ring);border-radius:12px;padding:8px;display:grid;grid-template-columns:112px 1fr;gap:10px;align-items:center}
+.card img{width:112px;height:112px;object-fit:cover;border-radius:10px;border:1px solid #101828}
+.tiny{font-size:11px;color:#9fb}
+.badge{display:inline-block;background:var(--badge);border:1px solid #3a4a77;color:#d3e1ff;padding:2px 6px;border-radius:999px;font-size:11px;margin-left:6px}
+
+/* Font preview */
+#fontPreview{margin-top:6px;padding:8px 10px;border:1px solid var(--ring);border-radius:10px;background:#0b1226;color:#e5e7eb;text-align:center;font-size:14px}
+
+/* Popup acciones al lado del botón */
+#portalRoot{position:fixed;inset:auto auto auto auto;display:none;z-index:80}
+.popup{width:320px;max-width:92vw;background:#0b1226;border:1px solid var(--ring);border-radius:12px;box-shadow:var(--shadow);padding:10px}
+.popup h4{margin:0 0 8px;font-size:14px}
+.popup .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.popup button{border:1px solid #2d3b55;background:linear-gradient(180deg,#1b2435,#141b2b);color:#e7f0ff;font-weight:700;cursor:pointer;border-radius:10px;padding:8px}
+.popup .close{display:block;margin-top:8px;background:#0b1226;border:1px solid var(--ring);padding:6px 10px;border-radius:10px;color:#e5e7eb;cursor:pointer}
 </style>
 </head>
 <body>
-<!-- (Tu estructura original aquí: chips A/B, Upload, Buttons, Result panel, history, etc.) -->
+<header>
+  <nav>
+    <a href="home.html">Home</a>
+    <a href="products.html">Products</a>
+    <a href="orders.html">Orders</a>
+    <a href="contact.html">Contacts</a>
+    <a href="novaai.html" aria-current="page">NovaAI</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <!-- Panel izquierdo -->
+  <section id="leftPanel" class="panel">
+    <div>
+      <h2>Generator</h2>
+
+      <!-- Catálogos -->
+      <div class="stack">
+        <div class="seg3" role="group" aria-label="Catálogos">
+          <a id="segSub" class="left"   href="tshirts.html?mode=catalog">Sublimation</a>
+          <a id="segLaser" class="center" href="products.html?cat=laser">Engraving</a>
+          <a id="seg3d" class="right"  href="3d.html?mode=catalog">3D Printing</a>
+        </div>
+      </div>
+
+      <!-- Chips + Flecha B→A -->
+      <div class="stack">
+        <div class="chipsRow">
+          <div class="chipBox" id="chipA"></div>
+          <div class="arrowBA" title="B modifies A">
+            <div class="led" id="ledBA"></div>
+            <div class="arrow">B → A</div>
+          </div>
+          <div class="chipBox" id="chipB"></div>
+        </div>
+      </div>
+
+      <!-- Upload -->
+      <div class="stack">
+        <label>Upload image (optional)</label>
+        <input id="upload" type="file" accept="image/*"/>
+      </div>
+
+      <!-- Font select -->
+      <div class="stack">
+        <label>Font</label>
+        <select id="font">
+          <optgroup label="Sans Serif">
+            <option>Inter</option><option>DM Sans</option><option>Montserrat</option><option>Poppins</option>
+            <option>Nunito</option><option>Lato</option><option>Roboto</option><option>Open Sans</option>
+            <option>Work Sans</option><option>Rubik</option><option>Manrope</option><option>Barlow</option>
+            <option>Jost</option><option>Urbanist</option><option>Mulish</option><option>Kanit</option>
+            <option>Hind</option><option>Heebo</option><option>Archivo</option><option>Source Sans Pro</option>
+            <option>Fira Sans</option><option>Cabin</option><option>Exo 2</option><option>Titillium Web</option>
+            <option>IBM Plex Sans</option><option>PT Sans</option><option>Quicksand</option><option>Josefin Sans</option>
+            <option>League Spartan</option><option>Jura</option><option>Orbitron</option>
+          </optgroup>
+          <optgroup label="Serif">
+            <option>Merriweather</option><option>Playfair Display</option><option>Crimson Pro</option><option>Libre Baskerville</option>
+            <option>Cormorant Garamond</option><option>DM Serif Display</option><option>EB Garamond</option><option>Lora</option>
+            <option>Spectral</option><option>Crete Round</option>
+          </optgroup>
+          <optgroup label="Display / Tech">
+            <option>Bebas Neue</option><option>Russo One</option><option>Oswald</option><option>Fredoka</option>
+            <option>Black Ops One</option><option>Michroma</option><option>Antonio</option><option>Teko</option>
+            <option>Rajdhani</option><option>Syncopate</option>
+          </optgroup>
+          <optgroup label="Handwriting / Script">
+            <option>Pacifico</option><option>Dancing Script</option><option>Great Vibes</option><option>Shadows Into Light</option>
+            <option>Sacramento</option><option>Courgette</option><option>Handlee</option><option>Homemade Apple</option>
+          </optgroup>
+        </select>
+        <div id="fontPreview">Sample Text</div>
+      </div>
+
+      <!-- Prompt -->
+      <div class="stack">
+        <label>Prompt</label>
+        <textarea id="prompt" placeholder='EN: Write "GET UP" below the shoe.  ·  ES: Escribe "LA CASA" en la camiseta (fuente seleccionada).'></textarea>
+        <div class="row" style="align-items:center">
+          <button id="actionsBtn" class="btn" style="background:#ffb020;color:#111;font-weight:900;border-radius:10px;padding:.55rem .9rem">Quick/Text actions</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto">
+            <input id="autoOpenHist" type="checkbox"> Open history after generate
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Panel resultado -->
+  <section class="panel">
+    <h2>Result (customer)</h2>
+    <div id="result" class="result"><div class="helper">No image yet.</div></div>
+
+    <!-- Botonera centrada -->
+    <div class="toolbar-wrap">
+      <div class="toolbar">
+        <div class="split">
+          <button class="left"  id="btnClear" title="Clear">Clear</button>
+          <button class="right" id="btnHist"  title="Open history">History</button>
+        </div>
+        <button class="fab" id="fabGen" title="NovaAI"><div class="inner">NovaAI</div></button>
+        <button class="cta-order" id="fabOrder" title="Place your order"><span class="ic">🛒</span><span>Order&nbsp;Now</span></button>
+      </div>
+    </div>
+
+    <div id="msg" class="msg"></div>
+  </section>
+</div>
+
+<!-- History -->
+<div id="slide" class="slide" aria-hidden="true">
+  <header>
+    <strong>Image history (24h)</strong>
+    <div class="row">
+      <button id="purge" class="btn ghost" type="button">Clear</button>
+      <button id="closeSlide" class="btn ghost" type="button">Close</button>
+    </div>
+  </header>
+  <div class="body"><div id="hist" class="hist"></div></div>
+</div>
+
+<!-- Modal Enlarge -->
+<dialog id="dlg" style="border:none;border-radius:14px;padding:0;background:#0b1220;color:#e5e7eb;max-width:92vw">
+  <div style="position:relative">
+    <button id="dlgClose" style="position:absolute;top:6px;right:6px;background:#0b1226;border:1px solid var(--ring);color:#e5e7eb;border-radius:10px;padding:6px 10px;cursor:pointer">✕</button>
+    <img id="dlgImg" alt="preview" style="max-width:100vw;max-height:80vh;display:block;border-radius:14px"/>
+  </div>
+</dialog>
+
+<!-- Popup (acciones) -->
+<div id="portalRoot">
+  <div id="actionsPopup" class="popup">
+    <h4>Quick actions</h4>
+    <div class="grid">
+      <button data-act="qa-insert">Insert B → A</button>
+      <button data-act="qa-replace">Replace with B</button>
+      <button data-act="qa-overlay">Overlay B</button>
+      <button data-act="qa-remove">Remove B</button>
+    </div>
+    <h4 style="margin-top:10px">Text actions</h4>
+    <div class="grid">
+      <button data-act="tx-write-en" title='Write "TEXT" with selected font'>Write text (EN)</button>
+      <button data-act="tx-write-es" title='Escribe "TEXTO" con la fuente seleccionada'>Escribir (ES)</button>
+      <button data-act="tx-watermark" title='Small brand mark bottom-right'>Watermark</button>
+      <button data-act="tx-price" title='Sticker / price tag'>Price tag</button>
+    </div>
+    <button id="actionsClose" class="close">Close</button>
+  </div>
+</div>
 
 <script>
-// ✅ TEMP backend debug server
-// const PROXY = "/proxy.php"; // 👉 Lo volvemos luego
-const PROXY = "https://novaai-flux-debug.onrender.com"; // ✅ tu Render debug
+/* ========= Config ========= */
+const PROXY='https://novaai-flux-debug.onrender.com';
+const API = PROXY.startsWith('http') ? (PROXY + '/api/generate') : (PROXY + '?p=api/generate');
+const HKEY='NN.novaai.hist24', DAY=24*60*60*1000, HMAX=60;
+const $=(s,root=document)=>root.querySelector(s);
 
-// 👉 Global vars
-let selectedA = null;
-let selectedB = null;
-let lastOp = null;
+/* ========= Utils ========= */
+function fileToDataURL(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file);});}
+async function urlToDataURL(url){try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw 0;const b=await r.blob();return await fileToDataURL(b);}catch{return null;}}
+async function fetchJSON(url,init){try{const r=await fetch(url,init);const t=await r.text();let j=null;try{j=JSON.parse(t);}catch{};return{ok:r.ok,status:r.status,json:j,text:t};}catch(e){return{ok:false,status:0,json:null,text:String(e)}}}
+async function compressDataURL(dataURL,maxW=1600,maxH=1600,quality=0.9){try{if(!/^data:image\//i.test(dataURL))return dataURL;const img=new Image();img.src=dataURL;await img.decode();let w=img.naturalWidth,h=img.naturalHeight,r=Math.min(maxW/w,maxH/h,1);const c=document.createElement('canvas');c.width=Math.round(w*r);c.height=Math.round(h*r);c.getContext('2d').drawImage(img,0,0,c.width,c.height);const isPng=dataURL.startsWith('data:image/png');const out=c.toDataURL(isPng?'image/png':'image/jpeg',quality);return out.length<dataURL.length?out:dataURL;}catch{return dataURL;}}
 
-// ✅ Capturar selección de chip A
-function selectA(base64) {
-  selectedA = base64;
-  lastOp = "useA";
+/* ========= Moderación básica ========= */
+const MOD={hard:['porn','xxx','nsfw','nude','nudity','genitals','gore','suicide','torture','kkk','nazi','swastika','isis','satan','baphomet','pentagram','ritual']};
+function blockedPrompt(t){const n=(t||'').toLowerCase();return MOD.hard.some(k=>n.includes(k));}
+
+/* ========= Incoming (products → A) ========= */
+const qs=new URLSearchParams(location.search);
+let incoming=null;try{incoming=JSON.parse(sessionStorage.getItem('novaai_incoming')||'null');}catch{}
+if(!incoming){const qRef=qs.get('ref')||qs.get('img')||'';incoming={id:qs.get('id')||'',name:qs.get('name')||'',ref:qRef,ref_data:''};}
+function normalizeRefUrl(u){ if(!u||typeof u!=="string")return''; if(u==='null'||u==='undefined')return''; if(u.startsWith('blob:'))return''; if(/^https?:\/\//i.test(u))return u; if(/^data:image\//i.test(u))return u; return''; }
+incoming.ref=normalizeRefUrl(incoming.ref);
+if(incoming.ref_data && !/^data:image\//i.test(incoming.ref_data)) incoming.ref_data='';
+
+/* ========= UI refs ========= */
+const chipA=$("#chipA"), chipB=$("#chipB");
+const ledBA=$("#ledBA");
+const upload=$("#upload"), promptBox=$("#prompt"), fontSel=$("#font"), fontPreview=$("#fontPreview");
+const result=$("#result"), msg=$("#msg");
+const slide=$("#slide"), hist=$("#hist"), purgeBtn=$("#purge"), closeSlide=$("#closeSlide");
+const btnClear=$("#btnClear"), btnHist=$("#btnHist"), fabGen=$("#fabGen"), fabOrder=$("#fabOrder");
+const actionsBtn=$("#actionsBtn"), portal=$("#portalRoot"), actionsPopup=$("#actionsPopup"), actionsClose=$("#actionsClose");
+
+/* ========= Estado ========= */
+let refA='', refB='';
+
+/* ========= Chips ========= */
+function emptyChipHTML(kind){
+  if(kind==='A') return `<span class="chip-empty"><span class="emptyTitle">Catalog</span><span class="emptyHint">(drag from History or use Catalogs)</span></span>`;
+  return `<span class="chip-empty"><span class="emptyTitle">Upload</span><span class="emptyHint">drop</span></span>`;
 }
-
-// ✅ Capturar subida B
-const fileInput = document.getElementById("fileInput");
-fileInput.onchange = function(e) {
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev){ selectedB = ev.target.result; lastOp = "useB"; };
-  reader.readAsDataURL(file);
+function chipHTML(kind, url){
+  return `<span class="chip" draggable="true" data-kind="${kind}">
+    <img class="thumb" src="${url}" alt="chip ${kind}">
+    <button class="xbtn" title="Clear" data-clear="${kind}">✕</button>
+  </span>`;
 }
-
-// ✅ Quick actions (igual que v26 original)
-function qaReplace(){ lastOp = "qa-replace"; generate(); }
-function qaOverlay(){ lastOp = "qa-overlay"; generate(); }
-function qaUseA(){ lastOp = "qa-useA"; selectedB=null; generate(); }
-function qaUseB(){ lastOp = "qa-useB"; selectedA=null; generate(); }
-
-// ✅ GENERAR
-async function generate(){
-  const prompt = document.getElementById("promptField").value || "";
-  const negative = "";
-
-  const body = {
-    ref: selectedA,
-    image_base64: selectedB,
-    prompt,
-    negative,
-    op: lastOp,
-    params: { strength: 0.38 },
-    debug: true // 🔥 modo diagnóstico
-  };
-
-  const res = await fetch(`${PROXY}/api/generate`,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(body)
+function paintChip(el, kind, url){
+  if(!url){ el.innerHTML=emptyChipHTML(kind); refreshLED(); return; }
+  el.innerHTML = chipHTML(kind,url);
+  el.querySelector('[data-clear]')?.addEventListener('click',()=>{
+    if(kind==='A') refA=''; else refB='';
+    paintChip(el,kind,'');
   });
-  const data = await res.json();
-  console.log("DEBUG RESPONSE",data);
-  document.getElementById("result").textContent = JSON.stringify(data,null,2);
+  el.querySelector('.chip')?.addEventListener('dragstart',(ev)=>{
+    ev.dataTransfer.setData('text/uri-list', url);
+    ev.dataTransfer.setData('text/plain', url);
+  });
+  refreshLED();
 }
+function refreshLED(){ ledBA.classList.toggle('on', !!(refA && refB)); }
+
+/* Inicial A */
+(async ()=>{
+  let ref = incoming.ref_data || incoming.ref || '';
+  if(ref && !/^data:image\//i.test(ref) && /^https?:\/\//i.test(ref)){
+    const as64 = await urlToDataURL(ref); if(as64) ref = as64;
+  }
+  if(ref){ refA = ref; }
+  paintChip(chipA,'A',refA);
+  paintChip(chipB,'B',refB);
+})();
+
+/* Upload → B */
+upload.addEventListener('change', async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  if(!/^image\//.test(f.type||'')){ msg.textContent='Only images.'; e.target.value=''; return; }
+  const fr=new FileReader();
+  fr.onload= async ()=>{ refB = await compressDataURL(fr.result); paintChip(chipB,'B',refB); };
+  fr.readAsDataURL(f);
+});
+
+/* ========= History ========= */
+function readHist(){ try{return JSON.parse(localStorage.getItem(HKEY))||[]}catch{return []} }
+function saveHist(a){ localStorage.setItem(HKEY, JSON.stringify(a)); }
+function purge24(a){ const now=Date.now(); return (a||[]).filter(x=>now-(x.ts||0)<=DAY); }
+function addHist(url,kind){ if(!url) return; let a=purge24(readHist()); a.unshift({id:crypto.randomUUID(),url,ts:Date.now(),kind:kind||''}); if(a.length>HMAX)a=a.slice(0,HMAX); saveHist(a); }
+function renderHist(){
+  const a=purge24(readHist()); saveHist(a);
+  hist.innerHTML='';
+  a.forEach(it=>{
+    const row=document.createElement('div'); row.className='card';
+    row.innerHTML=`
+      <img src="${it.url}" alt="hist" draggable="true" data-url="${it.url}">
+      <div>
+        <div class="tiny">${new Date(it.ts).toLocaleString()} ${it.kind?`<span class="badge">${it.kind}</span>`:''}</div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" data-act="enlarge" data-id="${it.id}">Enlarge</button>
+          <button class="btn" style="background:#ffb020;color:#111" data-act="order" data-id="${it.id}">Order</button>
+          <button class="btn ghost" data-act="customA" data-id="${it.id}">Customize → A</button>
+          <button class="btn ghost" data-act="customB" data-id="${it.id}">Customize → B</button>
+        </div>
+      </div>`;
+    hist.appendChild(row);
+    row.querySelector('img')?.addEventListener('dragstart',(ev)=>{
+      ev.dataTransfer.setData('text/uri-list', it.url);
+      ev.dataTransfer.setData('text/plain', it.url);
+    });
+  });
+}
+function openHistory(){ renderHist(); slide.classList.add('open'); slide.setAttribute('aria-hidden','false'); }
+function closeHistory(){ slide.classList.remove('open'); slide.setAttribute('aria-hidden','true'); }
+function toggleHistory(){ slide.classList.contains('open') ? closeHistory() : openHistory(); }
+btnHist.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggleHistory(); }, {capture:true});
+closeSlide.addEventListener('click', closeHistory);
+purgeBtn.addEventListener('click', ()=>{ localStorage.removeItem(HKEY); renderHist(); });
+
+const dlg=document.getElementById('dlg'), dlgImg=document.getElementById('dlgImg');
+document.getElementById('dlgClose').onclick=()=>dlg.close();
+dlg.addEventListener('click',(ev)=>{ const r=dlg.getBoundingClientRect(); if(!(ev.clientX>r.left&&ev.clientX<r.right&&ev.clientY>r.top&&ev.clientY<r.bottom)) dlg.close(); });
+hist.addEventListener('click', async (e)=>{
+  const b=e.target.closest('button[data-act]'); if(!b) return;
+  const a=readHist(); const rec=a.find(x=>x.id===b.dataset.id); if(!rec) return;
+  if(b.dataset.act==='enlarge'){ dlgImg.src=rec.url; dlg.showModal(); }
+  if(b.dataset.act==='order'){ gotoOrders(rec.url); }
+  if(b.dataset.act==='customA'){ refA=rec.url; paintChip(chipA,'A',refA); }
+  if(b.dataset.act==='customB'){ refB=rec.url; paintChip(chipB,'B',refB); }
+});
+[chipA, chipB].forEach((zone)=>{
+  zone.addEventListener('dragover',(e)=>{ e.preventDefault(); zone.style.outline='1px dashed #4da3ff'; });
+  zone.addEventListener('dragleave',()=>{ zone.style.outline='none'; });
+  zone.addEventListener('drop', async (e)=>{
+    e.preventDefault(); zone.style.outline='none';
+    const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+    if(!url) return;
+    const as64 = /^data:image\//i.test(url) ? url : await urlToDataURL(url);
+    if(zone===chipA){ refA = as64 || url; paintChip(chipA,'A',refA); }
+    else { refB = as64 || url; paintChip(chipB,'B',refB); }
+  });
+});
+
+/* ========= Order Now ========= */
+async function resolveOrdersUrl(){
+  const candidates=['orders.html','orders.htm','./orders.html','./orders.htm','/orders.html','/orders.htm'];
+  for(const path of candidates){
+    try{ const u=new URL(path, location.href); const r=await fetch(u.toString(),{method:'HEAD',cache:'no-store'}); if(r.ok) return u.toString(); }catch{}
+  }
+  return new URL('orders.html', location.href).toString();
+}
+async function gotoOrders(imgUrl){
+  const base = await resolveOrdersUrl();
+  const u = new URL(base);
+  if(imgUrl) u.searchParams.set('img', imgUrl);
+  location.assign(u.toString());
+}
+function orderNow(){
+  const histArr = readHist();
+  const last = histArr?.[0];
+  const safeUrl = last?.url || document.querySelector('#result img')?.src || '';
+  if(safeUrl) gotoOrders(safeUrl); else openHistory();
+}
+fabOrder.onclick=orderNow;
+
+/* ========= Fonts preview ========= */
+function fontToGoogleName(name){return name.trim().replace(/\s+/g,'+');}
+function ensureFontLoaded(name){
+  const id='gf-'+name.replace(/\s+/g,'-').toLowerCase();
+  if(document.getElementById(id)) return;
+  const ln=document.createElement('link');
+  ln.id=id; ln.rel='stylesheet';
+  ln.href=`https://fonts.googleapis.com/css2?family=${fontToGoogleName(name)}:wght@400;700&display=swap`;
+  document.head.appendChild(ln);
+}
+function updateFontPreview(){
+  const f=(fontSel.value||'DM Sans').trim();
+  ensureFontLoaded(f);
+  const fam = /Mono|Code|Consolas|Courier/i.test(f)?'monospace':'system-ui, -apple-system, Segoe UI, Roboto, Arial';
+  $("#fontPreview").textContent = f || 'Sample Text';
+  $("#fontPreview").style.fontFamily = `'${f}', ${fam}`;
+}
+updateFontPreview();
+fontSel.addEventListener('change', updateFontPreview);
+
+/* ========= Catálogo links ========= */
+(function(){
+  const map=[["segSub","tshirts.html?mode=catalog"],["segLaser","products.html?cat=laser"],["seg3d","3d.html?mode=catalog"]];
+  map.forEach(([id,url])=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); location.assign(url); },{capture:true});
+  });
+})();
+
+/* ========= Popup acciones (junto al botón amarillo) ========= */
+let popupOpen=false;
+function placePopupBy(btn){
+  const rect=btn.getBoundingClientRect();
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const pad=8, w=320, h=280;
+  let left = Math.min(vw - w - pad, Math.max(pad, rect.left));
+  let top  = Math.min(vh - h - pad, rect.bottom + 6);
+  portal.style.left = left + 'px';
+  portal.style.top  = top  + 'px';
+}
+function showPopup(){ placePopupBy(actionsBtn); portal.style.display='block'; popupOpen=true; }
+function hidePopup(){ portal.style.display='none'; popupOpen=false; }
+actionsBtn.addEventListener('click',(e)=>{ e.stopPropagation(); popupOpen ? hidePopup() : showPopup(); });
+actionsClose.addEventListener('click',(e)=>{ e.stopPropagation(); hidePopup(); });
+window.addEventListener('resize', ()=>{ if(popupOpen) placePopupBy(actionsBtn); });
+window.addEventListener('scroll', ()=>{ if(popupOpen) placePopupBy(actionsBtn); }, {passive:true});
+document.addEventListener('click',(e)=>{ if(!popupOpen) return; if(e.target===actionsBtn) return; if(portal.contains(e.target)) return; hidePopup(); });
+portal.addEventListener('click',(e)=>e.stopPropagation());
+portal.addEventListener('click',(e)=>{
+  const b=e.target.closest('button[data-act]'); if(!b) return;
+  const fontName=(fontSel.value||'DM Sans').trim();
+  let ins='';
+  if(b.dataset.act==='qa-insert')   ins=`Insert B into A, keep A's background and layout.`;
+  if(b.dataset.act==='qa-replace')  ins=`Replace A's main figure with B, preserve A's background and composition.`;
+  if(b.dataset.act==='qa-overlay')  ins=`Overlay B on A without changing A's background or camera.`;
+  if(b.dataset.act==='qa-remove')   ins=`Remove the figure B but keep layout/background of A.`;
+  if(b.dataset.act==='tx-write-en') ins=`Write "{TEXT}" using font family "${fontName}" as part of the scene (not overlay). Do not change colors or shapes.`;
+  if(b.dataset.act==='tx-write-es') ins=`Escribe "{TEXTO}" usando la familia de fuente "${fontName}" como parte de la escena (no superpuesto). No cambies colores ni formas.`;
+  if(b.dataset.act==='tx-watermark')ins=`Add a small watermark bottom-right: "{BRAND}" using font "${fontName}". Do not alter anything else.`;
+  if(b.dataset.act==='tx-price')    ins=`Add a small price tag with "{PRICE}" using font "${fontName}" without changing the scene.`;
+  const cur=(promptBox.value||'').trim();
+  promptBox.value = (cur? (cur + '\n'): '') + ins;
+  hidePopup();
+});
+
+/* ========= Intención / negativos (guardarraíles) ========= */
+const RE_COLOR = /(recolor|change color|tint|hue|saturation|brightness|darken|lighten|colorize|cambiar color|tinte|matiz|saturación|brillo|oscurecer|aclarar)/i;
+const RE_BG    = /(replace background|change background|new background|fondo nuevo|cambiar fondo|reemplaza fondo)/i;
+const RE_SHAPE = /(reshape|morph|change shape|swap head|swap face|cambiar forma|morfear|reemplaza (cara|cabeza)|deformar)/i;
+const RE_CROP  = /(crop|recorta|recortar|reencuadre|reframe|zoom in|zoom out)/i;
+const RE_LAYOUT= /(rearrange|recompose|move objects|mover objetos|reorganizar|recomponer)/i;
+const RE_AB    = /(insert|replace|overlay|merge|intersect|union|subtract|reemplaza|inserta|superpone|fusiona|interse(c|ct)|unir|restar)/i;
+
+function wantsColorChange(s){ return RE_COLOR.test(s||''); }
+function wantsBgChange(s){ return RE_BG.test(s||''); }
+function wantsShapeChange(s){ return RE_SHAPE.test(s||''); }
+function wantsCropChange(s){ return RE_CROP.test(s||''); }
+function wantsLayoutChange(s){ return RE_LAYOUT.test(s||''); }
+function mentionsAB(s){ return RE_AB.test(s||''); }
+
+function isTextIntent(s){
+  const low=(s||'').toLowerCase();
+  return /(^|\b)(write|text:|escribe|coloca|pon|agrega|añade)\b/.test(low) || /\".+\"/.test(s||'');
+}
+function extractQuotedText(s){
+  const m = s.match(/text\s*:\s*"([^"]+)"|\"([^"]+)\"/i);
+  if(!m) return null; return m[1] || m[2] || null;
+}
+function fontGuide(){
+  const f=(fontSel.value||'DM Sans').trim();
+  return [
+    `When writing text, USE FONT FAMILY exactly: "${f}" (case-sensitive).`,
+    `Render text embedded in the scene (printed/engraved/stitched as appropriate), not as a flat overlay.`
+  ].join('\n');
+}
+function sceneKeepers(){
+  return 'Keep SAME background, composition, palette, lighting and camera of the reference.\nPreserve silhouette and layout exactly.';
+}
+function negativesBase(){
+  return [
+    'no background change','no camera move','no crop','no resize',
+    'no style shift','no denoise','no upscaling'
+  ];
+}
+function negativesStrictColor(arr){ arr.push('no color change','no hue shift','no saturation change','no material change'); }
+function negativesNoShape(arr){ arr.push('no shape change','no figure change'); }
+
+/* ========= GENERATE principal ========= */
+async function doGenerate(){
+  if(blockedPrompt(promptBox.value)){ msg.innerHTML='<div class="alert">🚫 Prompt blocked by policy.</div>'; return; }
+  const raw=(promptBox.value||'').trim();
+  if(!(refA || refB)){ msg.textContent='Select A (Catalog) or B (Upload).'; return; }
+
+  fabGen.classList.add('busy'); fabGen.classList.remove('ok');
+  result.innerHTML='<div class="helper">Generating...</div>'; msg.textContent='';
+
+  // Convierte a base64 si es URL
+  let A=refA, B=refB;
+  if(A && !/^data:image\//i.test(A)){ const a64=await urlToDataURL(A); if(a64) A=a64; }
+  if(B && !/^data:image\//i.test(B)){ const b64=await urlToDataURL(B); if(b64) B=b64; }
+  if(A) A = await compressDataURL(A);
+  if(B) B = await compressDataURL(B);
+
+  const txtIntent  = isTextIntent(raw);
+  const quoted     = extractQuotedText(raw);
+
+  // Permisos a partir del prompt del usuario
+  const allowColor  = wantsColorChange(raw);
+  const allowBG     = wantsBgChange(raw);
+  const allowShape  = wantsShapeChange(raw);
+  const allowCrop   = wantsCropChange(raw);
+  const allowLayout = wantsLayoutChange(raw);
+  const allowAB     = mentionsAB(raw);
+
+  // Negativos según lo NO permitido
+  const negList = negativesBase();
+  if(!allowColor)  negativesStrictColor(negList);
+  if(!allowShape)  negativesNoShape(negList);
+  if(!allowBG)     negList.push('no background replace','no new background');
+  if(!allowCrop)   negList.push('no cropping','no reframing','no zoom change');
+  if(!allowLayout) negList.push('no object move','no recomposing','no rearrange');
+
+  // 1) Solo A o B y sin prompt → tal cual
+  if((A ^ B) && raw.length===0){
+    const img=A||B; result.innerHTML=`<img src="${img}" alt="result">`;
+    addHist(img,'Imitated'); finishOK(true); return;
+  }
+
+  // 2) Texto puro (súper estricto)
+  if(txtIntent){
+    const ref = A || B;
+    const textLine = quoted ? `Text to render exactly (verbatim): "${quoted}".` : 'Render the requested text verbatim.';
+    const guide = [
+      sceneKeepers(),
+      fontGuide(),
+      'Place text exactly where requested, matching perspective, lighting, materials and curvature.',
+      textLine,
+      'Do NOT alter existing colors, shapes, materials, background or camera unless explicitly requested.'
+    ].join('\n');
+
+    const r = await fetchJSON(API,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ debug: true, ref,
+        mode:'both',
+        prompt: [guide, (raw? `\nUser instruction:\n${raw}`:'')].join('\n'),
+        negative: negList.join(', '),
+        params: { keep_background:true, preserve_subject:true, preserve_layout:true, strength: 0.03 }
+      })
+    });
+    if(!r.ok){ result.innerHTML='<div class="helper">Failed.</div>'; msg.textContent=`Error ${r.status}\n${(r.text||'').slice(0,800)}`; fabGen.classList.remove('busy'); return; }
+    const url=r.json?.customer || r.json?.owner || r.json?.image || '';
+    if(url){ result.innerHTML=`<img src="${url}" alt="result">`; addHist(url,'Text'); if($("#autoOpenHist").checked) openHistory(); finishOK(true); }
+    else { result.innerHTML='<div class="helper">Empty response.</div>'; msg.textContent='No image in response'; fabGen.classList.remove('busy'); }
+    return;
+  }
+
+  // 3) A + B → B modifica A (solo si lo pides o vía quick action)
+  if(A && B){
+    const opsHint = allowAB
+      ? 'Use B exactly as requested (insert/replace/overlay) while keeping A background.'
+      : 'Merge B into A gently ONLY if it aligns with the scene; no color/style changes.';
+    const guide = [
+      raw.length===0 ? 'Merge B into A without changing A’s colors or background.' : 'Modify ONLY what is explicitly requested.',
+      sceneKeepers(),
+      fontGuide(),
+      opsHint
+    ].join('\n');
+
+    const r = await fetchJSON(API,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ debug: true, ref: A,
+        image_base64: B,
+        mode:'both',
+        prompt: [guide, (raw? `\nUser instruction:\n${raw}`:'')].join('\n'),
+        negative: negList.join(', '),
+        params: { keep_background:true, preserve_subject:true, preserve_layout:true, strength: allowAB ? 0.08 : 0.05 }
+      })
+    });
+    if(!r.ok){ result.innerHTML='<div class="helper">Failed.</div>'; msg.textContent=`Error ${r.status}\n${(r.text||'').slice(0,800)}`; fabGen.classList.remove('busy'); return; }
+    const url=r.json?.customer || r.json?.owner || r.json?.image || '';
+    if(url){ result.innerHTML=`<img src="${url}" alt="result">`; addHist(url,'B→A'); if($("#autoOpenHist").checked) openHistory(); finishOK(true); }
+    else { result.innerHTML='<div class="helper">Empty response.</div>'; msg.textContent='No image in response'; fabGen.classList.remove('busy'); }
+    return;
+  }
+
+  // 4) Una sola ref con prompt general → solo cambios solicitados
+  const ref = A||B;
+  const guide = [sceneKeepers(), fontGuide(), 'Apply ONLY the changes that were explicitly requested.'].join('\n');
+  const r = await fetchJSON(API,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ debug: true, ref,
+      mode:'both',
+      prompt: [guide, (raw? `\nUser instruction:\n${raw}`:'')].join('\n'),
+      negative: negList.join(', '),
+      params: { keep_background:true, preserve_subject:true, preserve_layout:true, strength: 0.06 }
+    })
+  });
+  if(!r.ok){ result.innerHTML='<div class="helper">Failed.</div>'; msg.textContent=`Error ${r.status}\n${(r.text||'').slice(0,800)}`; fabGen.classList.remove('busy'); return; }
+  const url=r.json?.customer || r.json?.owner || r.json?.image || '';
+  if(url){ result.innerHTML=`<img src="${url}" alt="result">`; addHist(url,'Edited'); if($("#autoOpenHist").checked) openHistory(); finishOK(true); }
+  else { result.innerHTML='<div class="helper">Empty response.</div>'; msg.textContent='No image in response'; fabGen.classList.remove('busy'); }
+}
+
+function finishOK(pulseOrder=false){
+  fabGen.classList.remove('busy'); fabGen.classList.add('ok');
+  setTimeout(()=>fabGen.classList.remove('ok'),1500);
+  if(pulseOrder){ fabOrder.classList.add('pulse'); setTimeout(()=>fabOrder.classList.remove('pulse'),1200); }
+}
+
+/* ========= Botones ========= */
+$("#btnClear").onclick=()=>{ result.innerHTML='<div class="helper">No image yet.</div>'; msg.textContent='Cleared.'; fabGen.classList.remove('busy','ok'); };
+$("#btnHist").onclick=()=>{ slide.classList.toggle('open'); slide.setAttribute('aria-hidden', slide.classList.contains('open')?'false':'true'); };
+$("#fabGen").onclick=doGenerate;
+
+/* ========= Debug guard ========= */
+window.onerror = function(m, src, line, col){ try{ msg.textContent = '⚠️ JS error: ' + m + ' @' + (src||'') + ':' + (line||'') + ':' + (col||''); }catch{} };
 </script>
-
-<pre id="result" style="color:#0f0;background:#111;padding:10px">Debug response...</pre>
-
 </body>
 </html>
